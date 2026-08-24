@@ -1,21 +1,30 @@
 import express from "express";
 import ytDlp from "yt-dlp-exec";
-import fs from "fs";
-import path from "path";
+import { generate } from "youtube-po-token-generator";
 
 const app = express();
 const PORT = process.env.PORT || 8000;
 
-// Environment variable se cookie padhne ke liye setup
-const YOUTUBE_COOKIES = process.env.YOUTUBE_COOKIES || "";
-const cookiesPath = path.join("/tmp", "cookies.txt");
+// Cache PO Token to avoid generating on every single request
+let cachedPoToken = null;
+let cachedVisitorData = null;
+let lastFetchTime = 0;
 
-if (YOUTUBE_COOKIES) {
-  try {
-    fs.writeFileSync(cookiesPath, YOUTUBE_COOKIES);
-  } catch (err) {
-    console.error("Error writing cookies file:", err);
+async function getPoToken() {
+  const currentTime = Date.now();
+  // Refresh PO Token every 6 hours
+  if (!cachedPoToken || currentTime - lastFetchTime > 6 * 60 * 60 * 1000) {
+    try {
+      const generated = await generate();
+      cachedPoToken = generated.poToken;
+      cachedVisitorData = generated.visitorData;
+      lastFetchTime = currentTime;
+      console.log("✅ New PO Token generated successfully!");
+    } catch (err) {
+      console.error("⚠️ PO Token Generation Failed, proceeding without token:", err.message);
+    }
   }
+  return { poToken: cachedPoToken, visitorData: cachedVisitorData };
 }
 
 app.get("/extract", async (req, res) => {
@@ -39,12 +48,13 @@ app.get("/extract", async (req, res) => {
     };
 
     if (isYouTube) {
-      // YouTube Bot Verification Bypass Options
-      options.extractorArgs = "youtube:player_client=ios,tv_embedded,web_embedded";
-      
-      // Agar cookies file exist karti hai toh use karein
-      if (fs.existsSync(cookiesPath)) {
-        options.cookies = cookiesPath;
+      const { poToken, visitorData } = await getPoToken();
+
+      options.extractorArgs = "youtube:player_client=web,mweb,ios";
+
+      if (poToken && visitorData) {
+        options.extractorArgs += `;po_token=web+${poToken}`;
+        options.headers = `Visitor-Data:${visitorData}`;
       }
     }
 
