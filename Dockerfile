@@ -1,9 +1,10 @@
 FROM node:20-slim
 
-# Install Python & FFmpeg (Required for yt-dlp across all sites)
+# Install Python, FFmpeg & create 'python' alias symlink
 RUN apt-get update && apt-get install -y \
     python3 \
     python3-pip \
+    python-is-python3 \
     ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
