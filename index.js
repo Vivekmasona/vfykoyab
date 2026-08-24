@@ -1,8 +1,22 @@
 import express from "express";
 import ytDlp from "yt-dlp-exec";
+import fs from "fs";
+import path from "path";
 
 const app = express();
 const PORT = process.env.PORT || 8000;
+
+// Environment variable se cookie padhne ke liye setup
+const YOUTUBE_COOKIES = process.env.YOUTUBE_COOKIES || "";
+const cookiesPath = path.join("/tmp", "cookies.txt");
+
+if (YOUTUBE_COOKIES) {
+  try {
+    fs.writeFileSync(cookiesPath, YOUTUBE_COOKIES);
+  } catch (err) {
+    console.error("Error writing cookies file:", err);
+  }
+}
 
 app.get("/extract", async (req, res) => {
   let { url } = req.query;
@@ -25,7 +39,13 @@ app.get("/extract", async (req, res) => {
     };
 
     if (isYouTube) {
-      options.extractorArgs = "youtube:player_client=ios,android,mweb";
+      // YouTube Bot Verification Bypass Options
+      options.extractorArgs = "youtube:player_client=ios,tv_embedded,web_embedded";
+      
+      // Agar cookies file exist karti hai toh use karein
+      if (fs.existsSync(cookiesPath)) {
+        options.cookies = cookiesPath;
+      }
     }
 
     const output = await ytDlp(url, options);
@@ -58,7 +78,6 @@ app.get("/extract", async (req, res) => {
       });
     }
 
-    // Direct Stream Fallback (Instagram Reels, TikTok, Shorts)
     if (videos.length === 0 && output.url) {
       videos.push({
         format_id: "best",
@@ -87,7 +106,7 @@ app.get("/extract", async (req, res) => {
   } catch (err) {
     return res.status(500).json({
       status: "error",
-      message: "Extraction failed. Link invalid, unsupported, or private.",
+      message: "Extraction failed.",
       details: err.message
     });
   }
