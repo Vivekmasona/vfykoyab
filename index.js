@@ -3,8 +3,9 @@ import ytDlp from "yt-dlp-exec";
 import { generate } from "youtube-po-token-generator";
 import puppeteer from "puppeteer-extra";
 import StealthPlugin from "puppeteer-extra-plugin-stealth";
+import puppeteerCore from "puppeteer-core";
 
-// Stealth plugin attach karein taaki Cloudflare bot detect na kar sake
+// Attach stealth plugin
 puppeteer.use(StealthPlugin());
 
 const app = express();
@@ -17,54 +18,50 @@ let lastFetchTime = 0;
 
 async function getPoToken() {
   const currentTime = Date.now();
-  // Refresh PO Token every 6 hours
   if (!cachedPoToken || currentTime - lastFetchTime > 6 * 60 * 60 * 1000) {
     try {
       const generated = await generate();
       cachedPoToken = generated.poToken;
       cachedVisitorData = generated.visitorData;
       lastFetchTime = currentTime;
-      console.log("✅ New YouTube PO Token generated successfully!");
+      console.log("✅ New PO Token generated successfully!");
     } catch (err) {
-      console.error("⚠️ PO Token Generation Failed, proceeding without token:", err.message);
+      console.error("⚠️ PO Token Generation Failed:", err.message);
     }
   }
   return { poToken: cachedPoToken, visitorData: cachedVisitorData };
 }
 
-// Cloudflare Bypass Helper Function
+// Cloudflare Bypass Function
 async function getCloudflareBypassData(targetUrl) {
   let browser = null;
   try {
     console.log(`🔍 Attempting Cloudflare bypass for: ${targetUrl}`);
     
+    // Use puppeteer-extra with puppeteer-core executable
     browser = await puppeteer.launch({
       headless: "new",
-      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || null, // Docker/Koyeb environment support
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || "/usr/bin/chromium",
       args: [
         "--no-sandbox",
         "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage", // Low RAM environment fix for Docker
+        "--disable-dev-shm-usage",
         "--disable-accelerated-2d-canvas",
         "--disable-gpu",
         "--no-first-run",
         "--no-zygote",
-        "--single-process", // Memory optimization for Koyeb Free Tier
+        "--single-process",
         "--disable-blink-features=AutomationControlled"
       ]
     });
 
     const page = await browser.newPage();
     
-    // Modern Browser User-Agent Set Karein
     await page.setUserAgent(
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
     );
 
-    // Target page open karein
     await page.goto(targetUrl, { waitUntil: "networkidle2", timeout: 30000 });
-    
-    // Cloudflare Challenge Solve hone ke liye Wait Time (4 seconds)
     await new Promise((resolve) => setTimeout(resolve, 4000));
 
     const userAgent = await page.evaluate(() => navigator.userAgent);
@@ -73,7 +70,7 @@ async function getCloudflareBypassData(targetUrl) {
     await browser.close();
 
     const cookieString = cookies.map((c) => `${c.name}=${c.value}`).join("; ");
-    console.log("✅ Cloudflare bypass successful! Retreived bypass headers.");
+    console.log("✅ Cloudflare bypass successful!");
 
     return { userAgent, cookieString };
   } catch (error) {
@@ -101,7 +98,7 @@ app.get("/extract", async (req, res) => {
       dumpSingleJson: true,
       noWarnings: true,
       referer: url,
-      impersonate: "chrome" // TLS Fingerprint bypass
+      impersonate: "chrome"
     };
 
     if (isYouTube) {
@@ -113,7 +110,6 @@ app.get("/extract", async (req, res) => {
         options.headers = `Visitor-Data:${visitorData}`;
       }
     } else {
-      // Direct HTTP fetch fail hone par Cloudflare Bypass Trigger karein
       const bypassData = await getCloudflareBypassData(url);
       if (bypassData && bypassData.cookieString) {
         options.addHeader = [
