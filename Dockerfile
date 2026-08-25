@@ -1,6 +1,6 @@
 FROM node:20-slim
 
-# Install Lightweight Chromium & dependencies
+# Install Chromium, ffmpeg, python3 AND python-is-python3
 RUN apt-get update && apt-get install -y \
     chromium \
     fonts-ipafont-gothic \
@@ -9,6 +9,7 @@ RUN apt-get update && apt-get install -y \
     fonts-kacst \
     fonts-freefont-ttf \
     python3 \
+    python-is-python3 \
     ffmpeg \
     --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
@@ -27,3 +28,4 @@ COPY . .
 EXPOSE 8000
 
 CMD ["npm", "start"]
+
