@@ -1,11 +1,16 @@
 import express from "express";
 import ytDlp from "yt-dlp-exec";
 import { generate } from "youtube-po-token-generator";
+import puppeteer from "puppeteer-extra";
+import StealthPlugin from "puppeteer-extra-plugin-stealth";
+
+// Stealth plugin attach karein taaki Cloudflare bot detect na kar sake
+puppeteer.use(StealthPlugin());
 
 const app = express();
 const PORT = process.env.PORT || 8000;
 
-// Cache PO Token to avoid generating on every single request
+// PO Token Caching
 let cachedPoToken = null;
 let cachedVisitorData = null;
 let lastFetchTime = 0;
@@ -19,12 +24,63 @@ async function getPoToken() {
       cachedPoToken = generated.poToken;
       cachedVisitorData = generated.visitorData;
       lastFetchTime = currentTime;
-      console.log("✅ New PO Token generated successfully!");
+      console.log("✅ New YouTube PO Token generated successfully!");
     } catch (err) {
       console.error("⚠️ PO Token Generation Failed, proceeding without token:", err.message);
     }
   }
   return { poToken: cachedPoToken, visitorData: cachedVisitorData };
+}
+
+// Cloudflare Bypass Helper Function
+async function getCloudflareBypassData(targetUrl) {
+  let browser = null;
+  try {
+    console.log(`🔍 Attempting Cloudflare bypass for: ${targetUrl}`);
+    
+    browser = await puppeteer.launch({
+      headless: "new",
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || null, // Docker/Koyeb environment support
+      args: [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage", // Low RAM environment fix for Docker
+        "--disable-accelerated-2d-canvas",
+        "--disable-gpu",
+        "--no-first-run",
+        "--no-zygote",
+        "--single-process", // Memory optimization for Koyeb Free Tier
+        "--disable-blink-features=AutomationControlled"
+      ]
+    });
+
+    const page = await browser.newPage();
+    
+    // Modern Browser User-Agent Set Karein
+    await page.setUserAgent(
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+    );
+
+    // Target page open karein
+    await page.goto(targetUrl, { waitUntil: "networkidle2", timeout: 30000 });
+    
+    // Cloudflare Challenge Solve hone ke liye Wait Time (4 seconds)
+    await new Promise((resolve) => setTimeout(resolve, 4000));
+
+    const userAgent = await page.evaluate(() => navigator.userAgent);
+    const cookies = await page.cookies();
+    
+    await browser.close();
+
+    const cookieString = cookies.map((c) => `${c.name}=${c.value}`).join("; ");
+    console.log("✅ Cloudflare bypass successful! Retreived bypass headers.");
+
+    return { userAgent, cookieString };
+  } catch (error) {
+    if (browser) await browser.close();
+    console.error("❌ Cloudflare bypass failed:", error.message);
+    return null;
+  }
 }
 
 app.get("/extract", async (req, res) => {
@@ -44,17 +100,26 @@ app.get("/extract", async (req, res) => {
     const options = {
       dumpSingleJson: true,
       noWarnings: true,
-      referer: url
+      referer: url,
+      impersonate: "chrome" // TLS Fingerprint bypass
     };
 
     if (isYouTube) {
       const { poToken, visitorData } = await getPoToken();
-
       options.extractorArgs = "youtube:player_client=web,mweb,ios";
 
       if (poToken && visitorData) {
         options.extractorArgs += `;po_token=web+${poToken}`;
         options.headers = `Visitor-Data:${visitorData}`;
+      }
+    } else {
+      // Direct HTTP fetch fail hone par Cloudflare Bypass Trigger karein
+      const bypassData = await getCloudflareBypassData(url);
+      if (bypassData && bypassData.cookieString) {
+        options.addHeader = [
+          `User-Agent:${bypassData.userAgent}`,
+          `Cookie:${bypassData.cookieString}`
+        ];
       }
     }
 
