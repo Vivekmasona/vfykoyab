@@ -3,15 +3,13 @@ import ytDlp from "yt-dlp-exec";
 import { generate } from "youtube-po-token-generator";
 import puppeteer from "puppeteer-extra";
 import StealthPlugin from "puppeteer-extra-plugin-stealth";
-import puppeteerCore from "puppeteer-core";
 
-// Attach stealth plugin
 puppeteer.use(StealthPlugin());
 
 const app = express();
 const PORT = process.env.PORT || 8000;
 
-// PO Token Caching
+// YouTube PO Token Cache
 let cachedPoToken = null;
 let cachedVisitorData = null;
 let lastFetchTime = 0;
@@ -32,13 +30,12 @@ async function getPoToken() {
   return { poToken: cachedPoToken, visitorData: cachedVisitorData };
 }
 
-// Cloudflare Bypass Function
+// Cloudflare / Anti-Bot Bypass
 async function getCloudflareBypassData(targetUrl) {
   let browser = null;
   try {
     console.log(`🔍 Attempting Cloudflare bypass for: ${targetUrl}`);
     
-    // Use puppeteer-extra with puppeteer-core executable
     browser = await puppeteer.launch({
       headless: "new",
       executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || "/usr/bin/chromium",
@@ -98,7 +95,10 @@ app.get("/extract", async (req, res) => {
       dumpSingleJson: true,
       noWarnings: true,
       referer: url,
-      impersonate: "chrome"
+      addHeader: [
+        'User-Agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept-Language:en-US,en;q=0.9'
+      ]
     };
 
     if (isYouTube) {
@@ -112,10 +112,10 @@ app.get("/extract", async (req, res) => {
     } else {
       const bypassData = await getCloudflareBypassData(url);
       if (bypassData && bypassData.cookieString) {
-        options.addHeader = [
-          `User-Agent:${bypassData.userAgent}`,
-          `Cookie:${bypassData.cookieString}`
-        ];
+        options.addHeader.push(`Cookie:${bypassData.cookieString}`);
+        if (bypassData.userAgent) {
+          options.addHeader[0] = `User-Agent:${bypassData.userAgent}`;
+        }
       }
     }
 
