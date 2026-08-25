@@ -11,7 +11,8 @@
     "puppeteer-core": "^22.6.0",
     "puppeteer-extra": "^3.3.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2",
-    "youtube-po-token-generator": "^0.2.2",
+    "youtube-po-token-generator": "latest",
     "yt-dlp-exec": "^3.0.1"
   }
 }
+
