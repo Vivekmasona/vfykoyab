@@ -1,7 +1,8 @@
 FROM node:20-slim
 
-# Install Chromium, ffmpeg, python3, python-is-python3 and curl
+# Install Chromium, ffmpeg, python, ca-certificates (SSL fix) and curl
 RUN apt-get update && apt-get install -y \
+    ca-certificates \
     chromium \
     fonts-ipafont-gothic \
     fonts-wqy-zenhei \
@@ -12,7 +13,7 @@ RUN apt-get update && apt-get install -y \
     python-is-python3 \
     ffmpeg \
     curl \
-    --no-install-recommends \
+    && update-ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # Set Environment Variables for Puppeteer Core
