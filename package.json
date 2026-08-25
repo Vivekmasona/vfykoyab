@@ -1,5 +1,5 @@
 {
-  "name": "universal-media-extractor",
+  "name": "media-extractor-api",
   "version": "1.0.0",
   "type": "module",
   "main": "index.js",
@@ -8,7 +8,10 @@
   },
   "dependencies": {
     "express": "^4.19.2",
-    "yt-dlp-exec": "latest",
-    "youtube-po-token-generator": "^0.4.0"
+    "puppeteer": "^22.6.0",
+    "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
+    "youtube-po-token-generator": "^0.2.2",
+    "yt-dlp-exec": "^3.0.1"
   }
 }
