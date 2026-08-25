@@ -1,6 +1,6 @@
 FROM node:20-slim
 
-# Install Chromium, ffmpeg, python3 AND python-is-python3
+# Install Chromium, ffmpeg, python3, python-is-python3 and curl
 RUN apt-get update && apt-get install -y \
     chromium \
     fonts-ipafont-gothic \
@@ -11,6 +11,7 @@ RUN apt-get update && apt-get install -y \
     python3 \
     python-is-python3 \
     ffmpeg \
+    curl \
     --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
@@ -28,4 +29,3 @@ COPY . .
 EXPOSE 8000
 
 CMD ["npm", "start"]
-
