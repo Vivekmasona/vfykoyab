@@ -96,6 +96,8 @@ app.get("/extract", async (req, res) => {
       noWarnings: true,
       noCheckCertificates: true, // SSL Verification bypass fix
       referer: url,
+      // Priority format: Progressive merged stream ko DASH formats se pehle select karega
+      format: "b/best/bestvideo+bestaudio/all",
       addHeader: [
         'User-Agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
         'Accept-Language:en-US,en;q=0.9'
@@ -129,19 +131,27 @@ app.get("/extract", async (req, res) => {
       output.formats.forEach((fmt) => {
         if (!fmt.url) return;
 
-        if (fmt.vcodec && fmt.vcodec !== "none") {
+        const hasVideo = fmt.vcodec && fmt.vcodec !== "none";
+        const hasAudio = fmt.acodec && fmt.acodec !== "none";
+
+        // Video format me audio present hai ya nahi, ye check karega
+        if (hasVideo) {
           videos.push({
             format_id: fmt.format_id,
             quality: fmt.format_note || `${fmt.height || "unknown"}p`,
-            ext: fmt.ext,
+            ext: fmt.ext || "mp4",
             resolution: fmt.resolution || (fmt.width ? `${fmt.width}x${fmt.height}` : "N/A"),
             file_size_mb: fmt.filesize ? (fmt.filesize / (1024 * 1024)).toFixed(2) : "Unknown",
+            has_audio: hasAudio,
             download_url: fmt.url
           });
-        } else if (fmt.acodec && fmt.acodec !== "none") {
+        } 
+        
+        // Pure Audio tracks (e.g. YouTube audio streams)
+        if (!hasVideo && hasAudio) {
           audios.push({
             format_id: fmt.format_id,
-            ext: fmt.ext,
+            ext: fmt.ext || "m4a",
             audio_bitrate: fmt.abr ? `${fmt.abr}kbps` : "N/A",
             file_size_mb: fmt.filesize ? (fmt.filesize / (1024 * 1024)).toFixed(2) : "Unknown",
             download_url: fmt.url
@@ -150,13 +160,30 @@ app.get("/extract", async (req, res) => {
       });
     }
 
+    // Direct Stream Fallback (Instagram, Shorts, Reels ke liye)
     if (videos.length === 0 && output.url) {
       videos.push({
         format_id: "best",
         quality: "HD / Direct Stream",
         ext: output.ext || "mp4",
+        has_audio: true,
         download_url: output.url
       });
+    }
+
+    // Smart Fallback for Audios: Agar Instagram/Facebook par separate audio format list na miley,
+    // toh audio-enabled video source link ko hi audio response me include kar diya jayega.
+    if (audios.length === 0 && videos.length > 0) {
+      const bestAudioSource = videos.find(v => v.has_audio) || videos[0];
+      if (bestAudioSource) {
+        audios.push({
+          format_id: "audio_extracted",
+          ext: "m4a / mp3",
+          audio_bitrate: "Original Audio Track",
+          file_size_mb: bestAudioSource.file_size_mb,
+          download_url: bestAudioSource.download_url
+        });
+      }
     }
 
     return res.json({
