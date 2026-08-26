@@ -96,8 +96,6 @@ app.get("/extract", async (req, res) => {
       noWarnings: true,
       noCheckCertificates: true,
       referer: url,
-      // Priority: Pehle Combined Single File (Audio+Video) Dhundega
-      format: "b/best",
       addHeader: [
         'User-Agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
         'Accept-Language:en-US,en;q=0.9'
@@ -127,28 +125,27 @@ app.get("/extract", async (req, res) => {
     const videos = [];
     const audios = [];
 
-    // Top Level Direct Stream URL check (Instagram Direct MP4 with Audio)
-    if (output.url) {
-      videos.push({
-        format_id: output.format_id || "best_combined",
-        quality: output.format_note || "HD Direct Stream",
-        ext: output.ext || "mp4",
-        resolution: output.resolution || (output.width ? `${output.width}x${output.height}` : "N/A"),
-        file_size_mb: output.filesize ? (output.filesize / (1024 * 1024)).toFixed(2) : "Unknown",
-        has_audio: true,
-        download_url: output.url
-      });
-    }
-
-    // Secondary formats loop (Agar list me additional streams ho)
     if (output.formats && Array.isArray(output.formats)) {
       output.formats.forEach((fmt) => {
         if (!fmt.url) return;
 
+        // DASH videos ko detect karne ka strict logic
+        const isDash = fmt.format_id && fmt.format_id.includes("dash");
         const hasVideo = fmt.vcodec && fmt.vcodec !== "none";
-        const hasAudio = fmt.acodec && fmt.acodec !== "none";
+        const hasAudio = fmt.acodec && fmt.acodec !== "none" && !isDash;
 
-        // Sirf Audio Stream
+        if (hasVideo) {
+          videos.push({
+            format_id: fmt.format_id,
+            quality: fmt.format_note || `${fmt.height || "unknown"}p`,
+            ext: fmt.ext || "mp4",
+            resolution: fmt.resolution || (fmt.width ? `${fmt.width}x${fmt.height}` : "N/A"),
+            file_size_mb: fmt.filesize ? (fmt.filesize / (1024 * 1024)).toFixed(2) : "Unknown",
+            has_audio: hasAudio, // DASH me strictly false jayega
+            download_url: fmt.url
+          });
+        }
+
         if (hasAudio && !hasVideo) {
           audios.push({
             format_id: fmt.format_id,
@@ -158,19 +155,17 @@ app.get("/extract", async (req, res) => {
             download_url: fmt.url
           });
         }
+      });
+    }
 
-        // Single Combined Video + Audio
-        if (hasVideo && hasAudio && !videos.some(v => v.download_url === fmt.url)) {
-          videos.push({
-            format_id: fmt.format_id,
-            quality: fmt.format_note || `${fmt.height || "unknown"}p`,
-            ext: fmt.ext || "mp4",
-            resolution: fmt.resolution || (fmt.width ? `${fmt.width}x${fmt.height}` : "N/A"),
-            file_size_mb: fmt.filesize ? (fmt.filesize / (1024 * 1024)).toFixed(2) : "Unknown",
-            has_audio: true,
-            download_url: fmt.url
-          });
-        }
+    // Direct Progressive Stream (Non-DASH)
+    if (output.url && !output.url.includes("dash")) {
+      videos.unshift({
+        format_id: "best_progressive",
+        quality: "HD Direct Stream",
+        ext: output.ext || "mp4",
+        has_audio: true,
+        download_url: output.url
       });
     }
 
