@@ -1,0 +1,8 @@
+# Netscape HTTP Cookie File
+# http://curl.haxx.se/rfc/cookie_spec.html
+# This is a generated file!  Do not edit.
+
+.youtube.com	TRUE	/	FALSE	0	GPS	1
+.youtube.com	TRUE	/	FALSE	0	YSC	dummy_ysc_token
+.instagram.com	TRUE	/	TRUE	0	csrftoken	dummy_csrf_token
+.instagram.com	TRUE	/	TRUE	0	ds_user_id	123456789
