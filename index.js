@@ -199,4 +199,5 @@ app.get("/extract", async (req, res) => {
   }
 });
 
-app.listen(PORT, () => console.log(`🚀 Extractor server running on port ${PORT}`));
+// Explicitly binding to 0.0.0.0 for Docker & Koyeb compatibility
+app.listen(PORT, "0.0.0.0", () => console.log(`🚀 Extractor server running on port ${PORT}`));
