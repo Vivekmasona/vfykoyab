@@ -1,6 +1,6 @@
 FROM node:20-slim
 
-# Install Chromium, ffmpeg, python, ca-certificates (SSL fix) and curl
+# SSL certificates, Chromium, ffmpeg, python setup
 RUN apt-get update && apt-get install -y \
     ca-certificates \
     chromium \
@@ -16,7 +16,6 @@ RUN apt-get update && apt-get install -y \
     && update-ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Set Environment Variables for Puppeteer Core
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
