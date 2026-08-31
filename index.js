@@ -78,7 +78,7 @@ async function getCloudflareBypassData(targetUrl) {
   }
 }
 
-// Root Route (Server Status Check)
+// Root Route (Health Check for Koyeb)
 app.get("/", (req, res) => {
   res.status(200).json({
     status: "online",
@@ -113,6 +113,7 @@ app.get("/extract", async (req, res) => {
       ]
     };
 
+    // Auto-detect cookies.txt in root directory
     if (fs.existsSync("./cookies.txt")) {
       options.cookies = "./cookies.txt";
     }
@@ -199,5 +200,5 @@ app.get("/extract", async (req, res) => {
   }
 });
 
-// Explicitly binding to 0.0.0.0 for Docker & Koyeb compatibility
+// Explicit host binding to 0.0.0.0 for Koyeb
 app.listen(PORT, "0.0.0.0", () => console.log(`🚀 Extractor server running on port ${PORT}`));
