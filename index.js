@@ -3,6 +3,7 @@ import ytDlp from "yt-dlp-exec";
 import { generate } from "youtube-po-token-generator";
 import puppeteer from "puppeteer-extra";
 import StealthPlugin from "puppeteer-extra-plugin-stealth";
+import fs from "fs";
 
 puppeteer.use(StealthPlugin());
 
@@ -30,11 +31,11 @@ async function getPoToken() {
   return { poToken: cachedPoToken, visitorData: cachedVisitorData };
 }
 
-// Browser Bypass
+// Cloudflare / Anti-Bot Bypass
 async function getCloudflareBypassData(targetUrl) {
   let browser = null;
   try {
-    console.log(`🔍 Attempting browser bypass for: ${targetUrl}`);
+    console.log(`🔍 Attempting Cloudflare bypass for: ${targetUrl}`);
     
     browser = await puppeteer.launch({
       headless: "new",
@@ -59,7 +60,7 @@ async function getCloudflareBypassData(targetUrl) {
     );
 
     await page.goto(targetUrl, { waitUntil: "networkidle2", timeout: 30000 });
-    await new Promise((resolve) => setTimeout(resolve, 3000));
+    await new Promise((resolve) => setTimeout(resolve, 4000));
 
     const userAgent = await page.evaluate(() => navigator.userAgent);
     const cookies = await page.cookies();
@@ -67,12 +68,12 @@ async function getCloudflareBypassData(targetUrl) {
     await browser.close();
 
     const cookieString = cookies.map((c) => `${c.name}=${c.value}`).join("; ");
-    console.log("✅ Bypass successful!");
+    console.log("✅ Cloudflare bypass successful!");
 
     return { userAgent, cookieString };
   } catch (error) {
     if (browser) await browser.close();
-    console.error("❌ Bypass failed:", error.message);
+    console.error("❌ Cloudflare bypass failed:", error.message);
     return null;
   }
 }
@@ -102,6 +103,11 @@ app.get("/extract", async (req, res) => {
       ]
     };
 
+    // Agar server root me cookies.txt hai to automatic attach ho jayegi
+    if (fs.existsSync("./cookies.txt")) {
+      options.cookies = "./cookies.txt";
+    }
+
     if (isYouTube) {
       const { poToken, visitorData } = await getPoToken();
       options.extractorArgs = "youtube:player_client=web,mweb,ios";
@@ -129,27 +135,19 @@ app.get("/extract", async (req, res) => {
       output.formats.forEach((fmt) => {
         if (!fmt.url) return;
 
-        // DASH videos ko detect karne ka strict logic
-        const isDash = fmt.format_id && fmt.format_id.includes("dash");
-        const hasVideo = fmt.vcodec && fmt.vcodec !== "none";
-        const hasAudio = fmt.acodec && fmt.acodec !== "none" && !isDash;
-
-        if (hasVideo) {
+        if (fmt.vcodec && fmt.vcodec !== "none") {
           videos.push({
             format_id: fmt.format_id,
             quality: fmt.format_note || `${fmt.height || "unknown"}p`,
-            ext: fmt.ext || "mp4",
+            ext: fmt.ext,
             resolution: fmt.resolution || (fmt.width ? `${fmt.width}x${fmt.height}` : "N/A"),
             file_size_mb: fmt.filesize ? (fmt.filesize / (1024 * 1024)).toFixed(2) : "Unknown",
-            has_audio: hasAudio, // DASH me strictly false jayega
             download_url: fmt.url
           });
-        }
-
-        if (hasAudio && !hasVideo) {
+        } else if (fmt.acodec && fmt.acodec !== "none") {
           audios.push({
             format_id: fmt.format_id,
-            ext: fmt.ext || "m4a",
+            ext: fmt.ext,
             audio_bitrate: fmt.abr ? `${fmt.abr}kbps` : "N/A",
             file_size_mb: fmt.filesize ? (fmt.filesize / (1024 * 1024)).toFixed(2) : "Unknown",
             download_url: fmt.url
@@ -158,13 +156,11 @@ app.get("/extract", async (req, res) => {
       });
     }
 
-    // Direct Progressive Stream (Non-DASH)
-    if (output.url && !output.url.includes("dash")) {
-      videos.unshift({
-        format_id: "best_progressive",
-        quality: "HD Direct Stream",
+    if (videos.length === 0 && output.url) {
+      videos.push({
+        format_id: "best",
+        quality: "HD / Direct Stream",
         ext: output.ext || "mp4",
-        has_audio: true,
         download_url: output.url
       });
     }
@@ -180,8 +176,8 @@ app.get("/extract", async (req, res) => {
         total_audio_formats: audios.length
       },
       data: {
-        videos: videos,
-        audios: audios
+        videos: videos.reverse(),
+        audios: audios.reverse()
       }
     });
 
