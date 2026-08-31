@@ -78,6 +78,16 @@ async function getCloudflareBypassData(targetUrl) {
   }
 }
 
+// Root Route (Server Status Check)
+app.get("/", (req, res) => {
+  res.status(200).json({
+    status: "online",
+    message: "🚀 Media Extractor API is Live and Ready!",
+    usage: "/extract?url=YOUR_VIDEO_URL"
+  });
+});
+
+// Media Extraction Endpoint
 app.get("/extract", async (req, res) => {
   let { url } = req.query;
 
@@ -103,7 +113,6 @@ app.get("/extract", async (req, res) => {
       ]
     };
 
-    // Agar server root me cookies.txt hai to automatic attach ho jayegi
     if (fs.existsSync("./cookies.txt")) {
       options.cookies = "./cookies.txt";
     }
