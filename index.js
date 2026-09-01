@@ -4,6 +4,7 @@ import { generate } from "youtube-po-token-generator";
 import puppeteer from "puppeteer-extra";
 import StealthPlugin from "puppeteer-extra-plugin-stealth";
 import fs from "fs";
+import axios from "axios";
 
 puppeteer.use(StealthPlugin());
 
@@ -29,6 +30,107 @@ async function getPoToken() {
     }
   }
   return { poToken: cachedPoToken, visitorData: cachedVisitorData };
+}
+
+// Helper: YouTube URL se Video ID extract karna
+function extractYouTubeId(url) {
+  const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
+  return match ? match[1] : null;
+}
+
+// -------------------------------------------------------------
+// INVIDIOUS BACKEND API INTEGRATION (Active Instance fetcher)
+// -------------------------------------------------------------
+async function extractViaInvidious(videoId) {
+  try {
+    console.log("🔍 Fetching active Invidious instances from api.invidious.io...");
+    const instancesRes = await axios.get("https://api.invidious.io/instances.json?sort_by=health", { timeout: 5000 });
+    const instances = instancesRes.data;
+
+    // Sirf HTTPS aur API-enabled active instances ko filter karein
+    const activeInstances = instances.filter(item => {
+      const details = item[1];
+      return details && details.api === true && details.type === "https" && details.health > 80;
+    });
+
+    for (const instance of activeInstances) {
+      const domain = instance[0];
+      const instanceUrl = `https://${domain}`;
+      console.log(`📡 Trying Invidious Backend Instance: ${instanceUrl}`);
+
+      try {
+        const videoRes = await axios.get(`${instanceUrl}/api/v1/videos/${videoId}`, { timeout: 6000 });
+        const data = videoRes.data;
+
+        if (data && (data.formatStreams || data.adaptiveFormats)) {
+          console.log(`✅ Invidious Backend Success from ${instanceUrl}`);
+          
+          const videos = [];
+          const audios = [];
+
+          // Combined Video + Audio streams
+          if (data.formatStreams) {
+            data.formatStreams.forEach((fmt) => {
+              videos.push({
+                format_id: fmt.container || "mp4",
+                quality: fmt.qualityLabel || fmt.resolution || "Direct Stream",
+                ext: fmt.container || "mp4",
+                resolution: fmt.resolution || "N/A",
+                file_size_mb: "Unknown",
+                download_url: fmt.url
+              });
+            });
+          }
+
+          // Adaptive Video / Audio Streams
+          if (data.adaptiveFormats) {
+            data.adaptiveFormats.forEach((fmt) => {
+              if (fmt.type && fmt.type.startsWith("video/")) {
+                videos.push({
+                  format_id: fmt.itag || "adaptive-video",
+                  quality: fmt.qualityLabel || "Adaptive",
+                  ext: fmt.container || "mp4",
+                  resolution: fmt.resolution || "N/A",
+                  file_size_mb: fmt.clen ? (parseInt(fmt.clen) / (1024 * 1024)).toFixed(2) : "Unknown",
+                  download_url: fmt.url
+                });
+              } else if (fmt.type && fmt.type.startsWith("audio/")) {
+                audios.push({
+                  format_id: fmt.itag || "adaptive-audio",
+                  ext: fmt.container || "m4a",
+                  audio_bitrate: fmt.bitrate ? `${Math.round(fmt.bitrate / 1000)}kbps` : "N/A",
+                  file_size_mb: fmt.clen ? (parseInt(fmt.clen) / (1024 * 1024)).toFixed(2) : "Unknown",
+                  download_url: fmt.url
+                });
+              }
+            });
+          }
+
+          return {
+            status: "success",
+            title: data.title || "YouTube Media Stream",
+            thumbnail: data.videoThumbnails ? data.videoThumbnails[0]?.url : null,
+            uploader: data.author || "Unknown",
+            source_site: `Invidious (${domain})`,
+            summary: {
+              total_video_formats: videos.length,
+              total_audio_formats: audios.length
+            },
+            data: {
+              videos: videos,
+              audios: audios
+            }
+          };
+        }
+      } catch (err) {
+        console.warn(`⚠️ Instance ${instanceUrl} failed or timed out: ${err.message}`);
+        continue; // Agle active instance par try karein
+      }
+    }
+  } catch (error) {
+    console.error("❌ Failed to fetch Invidious instances:", error.message);
+  }
+  return null;
 }
 
 // Cloudflare / Anti-Bot Bypass
@@ -78,7 +180,7 @@ async function getCloudflareBypassData(targetUrl) {
   }
 }
 
-// Root Route (Health Check for Koyeb)
+// Root Route
 app.get("/", (req, res) => {
   res.status(200).json({
     status: "online",
@@ -102,6 +204,19 @@ app.get("/extract", async (req, res) => {
   try {
     const isYouTube = url.includes("youtube.com") || url.includes("youtu.be");
 
+    // 1. Pehle Invidious Backend Active Instances se try karo (agar YouTube link hai)
+    if (isYouTube) {
+      const videoId = extractYouTubeId(url);
+      if (videoId) {
+        const invidiousResult = await extractViaInvidious(videoId);
+        if (invidiousResult) {
+          return res.json(invidiousResult);
+        }
+      }
+      console.log("⚠️ Invidious extraction missed/failed, falling back to yt-dlp...");
+    }
+
+    // 2. Fallback: yt-dlp + PO Token / Puppeteer logic
     const options = {
       dumpSingleJson: true,
       noWarnings: true,
@@ -113,7 +228,6 @@ app.get("/extract", async (req, res) => {
       ]
     };
 
-    // Auto-detect cookies.txt in root directory
     if (fs.existsSync("./cookies.txt")) {
       options.cookies = "./cookies.txt";
     }
