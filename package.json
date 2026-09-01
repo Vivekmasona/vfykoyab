@@ -10,9 +10,9 @@
     "axios": "^1.7.2",
     "cors": "^2.8.5",
     "express": "^4.19.2",
-    "puppeteer-core": "^22.10.0",
-    "puppeteer-extra": "^3.3.6",
-    "puppeteer-extra-plugin-stealth": "^2.11.2",
-    "youtube-po-token-generator": "^1.0.0"
+    "puppeteer-core": "*",
+    "puppeteer-extra": "*",
+    "puppeteer-extra-plugin-stealth": "*",
+    "youtube-po-token-generator": "*"
   }
 }
