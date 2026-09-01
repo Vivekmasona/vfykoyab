@@ -1,6 +1,6 @@
 FROM node:20-slim
 
-# System packages: SSL certificates, Chromium, ffmpeg, python setup
+# SSL certificates, Chromium for Puppeteer, and system dependencies
 RUN apt-get update && apt-get install -y \
     ca-certificates \
     chromium \
@@ -9,28 +9,25 @@ RUN apt-get update && apt-get install -y \
     fonts-thai-tlwg \
     fonts-kacst \
     fonts-freefont-ttf \
-    python3 \
-    python-is-python3 \
-    ffmpeg \
     curl \
     && update-ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Environment variables for Puppeteer & Node
+# Environment variables for Puppeteer & Node execution
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium \
     NODE_ENV=production
 
 WORKDIR /usr/src/app
 
-# Package files copy aur dependency installation
+# Package files copy and install production dependencies
 COPY package*.json ./
 RUN npm ci --only=production
 
 # Application code copy
 COPY . .
 
-# Non-root user permissions (Optional safety for Koyeb/Docker)
+# Expose server port
 EXPOSE 8000
 
 CMD ["npm", "start"]
