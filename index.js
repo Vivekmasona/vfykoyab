@@ -13,7 +13,6 @@ const PORT = process.env.PORT || 8000;
 app.use(cors());
 app.use(express.json());
 
-// Background PO Token System
 let cachedPoToken = null;
 let cachedVisitorData = null;
 let lastFetchTime = 0;
@@ -21,28 +20,42 @@ let lastFetchTime = 0;
 async function getPoToken() {
   const currentTime = Date.now();
   if (!cachedPoToken || currentTime - lastFetchTime > 4 * 60 * 60 * 1000) {
+    let browser = null;
     try {
       console.log("⚙️ Generating Fresh PO Token via Puppeteer Stealth...");
-      const browser = await puppeteer.launch({
+      browser = await puppeteer.launch({
         headless: "new",
         executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || "/usr/bin/chromium",
-        args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--single-process"]
+        args: [
+          "--no-sandbox",
+          "--disable-setuid-sandbox",
+          "--disable-dev-shm-usage",
+          "--disable-accelerated-2d-canvas",
+          "--no-first-run",
+          "--no-zygote",
+          "--single-process",
+          "--disable-gpu",
+          "--disable-extensions",
+          "--js-flags=--max-old-space-size=128"
+        ]
       });
       
       const generated = await generate(browser);
       cachedPoToken = generated.poToken;
       cachedVisitorData = generated.visitorData;
       lastFetchTime = currentTime;
-      await browser.close();
       console.log("✅ PO Token Generated Successfully!");
     } catch (err) {
       console.error("⚠️ PO Token Generation Warning:", err.message);
+    } finally {
+      if (browser) {
+        await browser.close();
+      }
     }
   }
   return { poToken: cachedPoToken, visitorData: cachedVisitorData };
 }
 
-// Initial trigger
 getPoToken().catch(() => {});
 
 function extractYouTubeId(url) {
@@ -50,7 +63,6 @@ function extractYouTubeId(url) {
   return match ? match[1] : null;
 }
 
-// Active Invidious backend fetcher
 async function getAudioUrlFromInvidious(videoId) {
   try {
     const instancesRes = await axios.get("https://api.invidious.io/instances.json?sort_by=health", { timeout: 5000 });
